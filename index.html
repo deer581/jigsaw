@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>智能网格拼图 · 多页批量排版</title>
+    <!-- 用于导出 ZIP -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <!-- 用于保存文件 -->
+    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fb;
+            color: #1e1e2f;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+        }
+        .app {
+            max-width: 1400px;
+            width: 100%;
+            background: white;
+            border-radius: 32px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.05);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .badge {
+            background: #e6edf5;
+            color: #2c5f8a;
+            padding: 4px 12px;
+            border-radius: 30px;
+            font-size: 0.9rem;
+            font-weight: 400;
+        }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 16px 24px;
+            background: #fafbfc;
+            padding: 16px 20px;
+            border-radius: 24px;
+            border: 1px solid #e9ecf0;
+        }
+        .tool-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .tool-group label {
+            font-weight: 500;
+            color: #3a4a5c;
+            font-size: 0.9rem;
+        }
+        input[type="number"] {
+            width: 80px;
+            padding: 8px 12px;
+            border: 1px solid #cfd9e2;
+            border-radius: 16px;
+            font-size: 1rem;
+            background: white;
+            transition: 0.15s;
+        }
+        input[type="number"]:focus {
+            border-color: #3b82f6;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+        }
+        button {
+            background: white;
+            border: 1px solid #cfd9e2;
+            padding: 8px 18px;
+            border-radius: 30px;
+            font-weight: 500;
+            font-size: 0.95rem;
+            color: #1e293b;
+            cursor: pointer;
+            transition: all 0.15s;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        button.primary {
+            background: #1e293b;
+            border-color: #1e293b;
+            color: white;
+        }
+        button.primary:hover {
+            background: #0f172a;
+        }
+        button:hover {
+            background: #f1f5f9;
+            border-color: #94a3b8;
+        }
+        .file-input-wrapper {
+            position: relative;
+        }
+        .file-input-wrapper input {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+        .main-panel {
+            display: flex;
+            gap: 24px;
+            flex: 1;
+            min-height: 500px;
+        }
+        .thumbnail-sidebar {
+            width: 160px;
+            background: #fafbfc;
+            border-radius: 24px;
+            padding: 16px 8px;
+            border: 1px solid #e9ecf0;
+            overflow-y: auto;
+            max-height: 600px;
+        }
+        .thumb-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .thumb-item {
+            aspect-ratio: 9/16;
+            background: #e2e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid transparent;
+            cursor: grab;
+            transition: 0.1s;
+            position: relative;
+        }
+        .thumb-item.dragging {
+            opacity: 0.5;
+            border: 2px dashed #3b82f6;
+        }
+        .thumb-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            pointer-events: none;
+        }
+        .thumb-index {
+            position: absolute;
+            bottom: 4px;
+            left: 4px;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            font-size: 12px;
+            padding: 2px 6px;
+            border-radius: 20px;
+            font-weight: 500;
+        }
+        .canvas-area {
+            flex: 1;
+            background: #f2f4f8;
+            border-radius: 24px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #e9ecf0;
+        }
+        .preview-container {
+            max-width: 100%;
+            max-height: 100%;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+            border-radius: 16px;
+            background: white;
+            overflow: auto;
+            display: flex;
+            justify-content: center;
+        }
+        canvas#previewCanvas {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            border-radius: 12px;
+        }
+        .pagination-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 12px;
+            width: 100%;
+        }
+        .page-control {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .page-info {
+            font-weight: 500;
+            background: #eef2ff;
+            padding: 6px 18px;
+            border-radius: 30px;
+            color: #1e3a8a;
+        }
+        .stats {
+            color: #475569;
+            font-size: 0.9rem;
+        }
+        .export-options {
+            display: flex;
+            gap: 8px;
+        }
+        .footer-note {
+            text-align: center;
+            color: #64748b;
+            font-size: 0.8rem;
+        }
+        .divider {
+            width: 1px;
+            height: 24px;
+            background: #d1d9e6;
+            margin: 0 4px;
+        }
+        .warning-text {
+            color: #b45309;
+            background: #fffbeb;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+        }
+        input[type="range"] {
+            width: 140px;
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <h1>
+        🧩 格·拼图
+        <span class="badge">批量网格 · 9:16 锁定 · 智能分页</span>
+    </h1>
+    
+    <!-- 工具栏 -->
+    <div class="toolbar">
+        <div class="tool-group file-input-wrapper">
+            <button>📂 导入图片</button>
+            <input type="file" id="fileInput" accept="image/*" multiple>
+        </div>
+        <div class="divider"></div>
+        <div class="tool-group">
+            <label>行</label>
+            <input type="number" id="rowsInput" min="1" max="20" value="3">
+        </div>
+        <div class="tool-group">
+            <label>列</label>
+            <input type="number" id="colsInput" min="1" max="20" value="3">
+        </div>
+        <button id="nineGridBtn">🔲 九宫格</button>
+        <div class="divider"></div>
+        <div class="tool-group">
+            <label>🔢 编号大小</label>
+            <input type="range" id="fontSizeSlider" min="12" max="64" value="28" step="1">
+            <span id="fontSizeValue">28px</span>
+        </div>
+        <div class="divider"></div>
+        <div class="tool-group">
+            <label>📐 高清倍数</label>
+            <select id="scaleSelect">
+                <option value="1">1x (预览)</option>
+                <option value="2" selected>2x</option>
+                <option value="3">3x</option>
+                <option value="4">4x</option>
+            </select>
+        </div>
+        <div style="flex:1"></div>
+        <div class="export-options">
+            <button id="exportCurrentBtn" class="primary">⬇ 导出当前页</button>
+            <button id="exportAllBtn">📦 导出全部 (ZIP)</button>
+        </div>
+    </div>
+
+    <!-- 主区域: 缩略图 + 画布 -->
+    <div class="main-panel">
+        <div class="thumbnail-sidebar">
+            <div style="margin-bottom:12px; font-weight:500; text-align:center; font-size:0.9rem">
+                📷 图片队列 <span id="imageCount">0</span>/9999
+            </div>
+            <div class="thumb-list" id="thumbList"></div>
+            <div style="margin-top:12px; font-size:0.75rem; color:#6b7280; text-align:center;">
+                拖拽调整顺序
+            </div>
+        </div>
+        <div class="canvas-area">
+            <div class="preview-container" id="previewContainer">
+                <canvas id="previewCanvas"></canvas>
+            </div>
+            <div class="pagination-bar">
+                <div class="page-control">
+                    <button id="prevPageBtn" disabled>◀ 上一页</button>
+                    <span class="page-info" id="pageIndicator">第 1 / 1 页</span>
+                    <button id="nextPageBtn" disabled>下一页 ▶</button>
+                </div>
+                <div class="stats" id="statsText"></div>
+            </div>
+        </div>
+    </div>
+    <div class="footer-note">
+        ⚡ 所有图片强制适配 9:16 比例 (居中裁剪) · 每张图下方显示可调编号 · 最多支持 9999 张
+    </div>
+</div>
+
+<script>
+    (function(){
+        "use strict";
+
+        // ---------- 全局状态 ----------
+        let images = [];                // 存储原始图片对象 { img, id, order }
+        let currentPage = 0;
+        let rows = 3;
+        let cols = 3;
+        let fontSize = 28;             // 编号字号 (px)
+        
+        // 固定单图比例 9:16 (宽:高)
+        const ASPECT_RATIO = 9 / 16;    // 宽高比
+        
+        // 导出画布基础尺寸：每个格子基础宽高 (预览时用)
+        const BASE_CELL_WIDTH = 180;     // 预览单元格宽度 (px)
+        const BASE_CELL_HEIGHT = BASE_CELL_WIDTH / ASPECT_RATIO; // 180 / (9/16) = 320px
+
+        // DOM 元素
+        const fileInput = document.getElementById('fileInput');
+        const rowsInput = document.getElementById('rowsInput');
+        const colsInput = document.getElementById('colsInput');
+        const nineGridBtn = document.getElementById('nineGridBtn');
+        const fontSizeSlider = document.getElementById('fontSizeSlider');
+        const fontSizeValue = document.getElementById('fontSizeValue');
+        const scaleSelect = document.getElementById('scaleSelect');
+        const exportCurrentBtn = document.getElementById('exportCurrentBtn');
+        const exportAllBtn = document.getElementById('exportAllBtn');
+        const prevPageBtn = document.getElementById('prevPageBtn');
+        const nextPageBtn = document.getElementById('nextPageBtn');
+        const pageIndicator = document.getElementById('pageIndicator');
+        const statsText = document.getElementById('statsText');
+        const imageCountSpan = document.getElementById('imageCount');
+        const thumbList = document.getElementById('thumbList');
+        const previewCanvas = document.getElementById('previewCanvas');
+        
+        let previewCtx = previewCanvas.getContext('2d');
+
+        // ---------- 辅助函数 ----------
+        function updateImageCountDisplay() {
+            imageCountSpan.textContent = images.length;
+        }
+
+        // 计算总页数
+        function getTotalPages() {
+            const perPage = rows * cols;
+            if (perPage === 0) return 0;
+            return Math.ceil(images.length / perPage);
+        }
+
+        // 获取当前页应显示的图片切片
+        function getCurrentPageImages() {
+            const perPage = rows * cols;
+            const start = currentPage * perPage;
+            const end = Math.min(start + perPage, images.length);
+            return images.slice(start, end);
+        }
+
+        // 绘制预览 (基于当前 rows, cols, fontSize)
+        function renderPreview() {
+            const totalPages = getTotalPages();
+            if (images.length === 0 || totalPages === 0) {
+                // 清空画布
+                previewCanvas.width = 400;
+                previewCanvas.height = 300;
+                previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+                previewCtx.font = '16px system-ui';
+                previewCtx.fillStyle = '#94a3b8';
+                previewCtx.textAlign = 'center';
+                previewCtx.fillText('暂无图片，请导入', previewCanvas.width/2, previewCanvas.height/2);
+                statsText.textContent = '';
+                pageIndicator.textContent = `第 0 / 0 页`;
+                prevPageBtn.disabled = true;
+                nextPageBtn.disabled = true;
+                return;
+            }
+
+            // 调整当前页有效性
+            if (currentPage >= totalPages) currentPage = totalPages - 1;
+            if (currentPage < 0) currentPage = 0;
+
+            const pageImages = getCurrentPageImages();
+            const perPage = rows * cols;
+            
+            // 画布尺寸 = 列数 * 基础宽 , 行数 * 基础高
+            const canvasWidth = cols * BASE_CELL_WIDTH;
+            const canvasHeight = rows * BASE_CELL_HEIGHT;
+            previewCanvas.width = canvasWidth;
+            previewCanvas.height = canvasHeight;
+            
+            // 白色背景
+            previewCtx.fillStyle = '#ffffff';
+            previewCtx.fillRect(0, 0, canvasWidth, canvasHeight);
+            
+            // 绘制网格线和背景框 (可选)
+            previewCtx.strokeStyle = '#e2e8f0';
+            previewCtx.lineWidth = 0.5;
+            
+            // 逐个绘制图片
+            for (let i = 0; i < perPage; i++) {
+                const r = Math.floor(i / cols);
+                const c = i % cols;
+                const x = c * BASE_CELL_WIDTH;
+                const y = r * BASE_CELL_HEIGHT;
+                
+                // 绘制背景占位
+                previewCtx.fillStyle = '#f1f5f9';
+                previewCtx.fillRect(x, y, BASE_CELL_WIDTH, BASE_CELL_HEIGHT);
+                
+                const imgData = pageImages[i];
+                if (imgData) {
+                    // 绘制图片 (已适配 9:16，直接 cover 绘制)
+                    const img = imgData.img;
+                    // 计算 cover 绘制参数 (居中裁剪)
+                    const imgRatio = img.width / img.height;
+                    const targetRatio = ASPECT_RATIO;
+                    
+                    let drawWidth, drawHeight, offsetX, offsetY;
+                    if (imgRatio > targetRatio) {
+                        // 图片更宽，以高度为准
+                        drawHeight = BASE_CELL_HEIGHT;
+                        drawWidth = drawHeight * imgRatio;
+                        offsetX = (BASE_CELL_WIDTH - drawWidth) / 2;
+                        offsetY = 0;
+                    } else {
+                        // 图片更高，以宽度为准
+                        drawWidth = BASE_CELL_WIDTH;
+                        drawHeight = drawWidth / imgRatio;
+                        offsetX = 0;
+                        offsetY = (BASE_CELL_HEIGHT - drawHeight) / 2;
+                    }
+                    previewCtx.drawImage(img, x + offsetX, y + offsetY, drawWidth, drawHeight);
+                    
+                    // 绘制编号 (在图片下方区域，白底黑字带背景)
+                    const number = imgData.order + 1; // order从0开始
+                    const text = `${number}`;
+                    const fontSizePx = fontSize;
+                    previewCtx.font = `500 ${fontSizePx}px system-ui, -apple-system, sans-serif`;
+                    previewCtx.textAlign = 'center';
+                    previewCtx.textBaseline = 'middle';
+                    
+                    const textX = x + BASE_CELL_WIDTH / 2;
+                    const textY = y + BASE_CELL_HEIGHT - fontSizePx/2 - 8; // 靠下
+                    
+                    // 背景条
+                    const metrics = previewCtx.measureText(text);
+                    const textWidth = metrics.width;
+                    const padding = 8;
+                    previewCtx.fillStyle = 'rgba(0,0,0,0.5)';
+                    previewCtx.beginPath();
+                    previewCtx.roundRect(textX - textWidth/2 - padding, textY - fontSizePx/2 - 4, textWidth + padding*2, fontSizePx + 8, 20);
+                    previewCtx.fill();
+                    
+                    previewCtx.fillStyle = '#ffffff';
+                    previewCtx.fillText(text, textX, textY);
+                }
+                
+                // 绘制网格线
+                previewCtx.strokeRect(x, y, BASE_CELL_WIDTH, BASE_CELL_HEIGHT);
+            }
+            
+            // 更新分页UI
+            pageIndicator.textContent = `第 ${currentPage+1} / ${totalPages} 页`;
+            prevPageBtn.disabled = (currentPage === 0);
+            nextPageBtn.disabled = (currentPage === totalPages - 1);
+            
+            const perPageCount = rows * cols;
+            statsText.textContent = `每页 ${perPageCount} 张 · 共 ${images.length} 张图片 · ${totalPages} 页`;
+        }
+
+        // 扩展 Canvas: roundRect
+        CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+            if (w < 2 * r) r = w / 2;
+            if (h < 2 * r) r = h / 2;
+            this.moveTo(x + r, y);
+            this.lineTo(x + w - r, y);
+            this.quadraticCurveTo(x + w, y, x + w, y + r);
+            this.lineTo(x + w, y + h - r);
+            this.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            this.lineTo(x + r, y + h);
+            this.quadraticCurveTo(x, y + h, x, y + h - r);
+            this.lineTo(x, y + r);
+            this.quadraticCurveTo(x, y, x + r, y);
+            return this;
+        };
+
+        // 重建缩略图列表 (支持拖拽)
+        function renderThumbnails() {
+            thumbList.innerHTML = '';
+            images.forEach((item, idx) => {
+                const div = document.createElement('div');
+                div.className = 'thumb-item';
+                div.draggable = true;
+                div.setAttribute('data-index', idx);
+                
+                const imgEl = document.createElement('img');
+                imgEl.src = item.img.src;
+                div.appendChild(imgEl);
+                
+                const indexSpan = document.createElement('span');
+                indexSpan.className = 'thumb-index';
+                indexSpan.textContent = item.order + 1;
+                div.appendChild(indexSpan);
+                
+                // 拖拽事件
+                div.addEventListener('dragstart', handleDragStart);
+                div.addEventListener('dragenter', handleDragEnter);
+                div.addEventListener('dragover', handleDragOver);
+                div.addEventListener('drop', handleDrop);
+                div.addEventListener('dragend', handleDragEnd);
+                
+                thumbList.appendChild(div);
+            });
+        }
+
+        // 拖拽逻辑
+        let dragSourceIndex = null;
+        function handleDragStart(e) {
+            dragSourceIndex = parseInt(e.currentTarget.getAttribute('data-index'));
+            e.dataTransfer.effectAllowed = 'move';
+            e.currentTarget.classList.add('dragging');
+        }
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        }
+        function handleDragEnter(e) {
+            e.preventDefault();
+        }
+        function handleDrop(e) {
+            e.preventDefault();
+            const targetDiv = e.currentTarget;
+            const targetIndex = parseInt(targetDiv.getAttribute('data-index'));
+            if (dragSourceIndex !== null && targetIndex !== dragSourceIndex) {
+                // 交换 images 数组
+                [images[dragSourceIndex], images[targetIndex]] = [images[targetIndex], images[dragSourceIndex]];
+                // 重新分配 order
+                images.forEach((img, i) => { img.order = i; });
+                // 刷新UI
+                renderThumbnails();
+                renderPreview();
+                updateImageCountDisplay();
+            }
+        }
+        function handleDragEnd(e) {
+            document.querySelectorAll('.thumb-item').forEach(el => el.classList.remove('dragging'));
+            dragSourceIndex = null;
+        }
+
+        // 导入图片
+        function importImages(files) {
+            const fileArray = Array.from(files).slice(0, 9999); // 上限9999
+            if (fileArray.length === 0) return;
+            
+            // 显示加载提示
+            const loadPromises = fileArray.map((file, idx) => {
+                return new Promise((resolve) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        resolve({ img, order: images.length + idx });
+                    };
+                    img.onerror = () => resolve(null);
+                    img.src = URL.createObjectURL(file);
+                });
+            });
+            
+            Promise.all(loadPromises).then(newImgs => {
+                const validImgs = newImgs.filter(item => item !== null);
+                images = images.concat(validImgs).slice(0, 9999);
+                // 重新整理order
+                images.forEach((item, i) => item.order = i);
+                
+                // 重置到第一页
+                currentPage = 0;
+                updateImageCountDisplay();
+                renderThumbnails();
+                renderPreview();
+                
+                // 清空input
+                fileInput.value = '';
+            });
+        }
+
+        // 高清导出 (指定页索引, 倍数)
+        async function exportPageAsBlob(pageIndex, scaleFactor = 2) {
+            const totalPages = getTotalPages();
+            if (pageIndex < 0 || pageIndex >= totalPages) return null;
+            
+            const perPage = rows * cols;
+            const start = pageIndex * perPage;
+            const end = Math.min(start + perPage, images.length);
+            const pageImages = images.slice(start, end);
+            
+            // 每个单元格的高清基础尺寸 (预览时用的BASE_CELL_WIDTH, 导出时乘倍数)
+            const cellW = BASE_CELL_WIDTH * scaleFactor;
+            const cellH = BASE_CELL_HEIGHT * scaleFactor;
+            const canvasW = cols * cellW;
+            const canvasH = rows * cellH;
+            
+            const offCanvas = document.createElement('canvas');
+            offCanvas.width = canvasW;
+            offCanvas.height = canvasH;
+            const ctx = offCanvas.getContext('2d', { alpha: false });
+            
+            // 白色背景
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvasW, canvasH);
+            
+            // 绘制每个格子
+            for (let i = 0; i < perPage; i++) {
+                const r = Math.floor(i / cols);
+                const c = i % cols;
+                const x = c * cellW;
+                const y = r * cellH;
+                
+                ctx.fillStyle = '#f8fafc';
+                ctx.fillRect(x, y, cellW, cellH);
+                
+                const imgData = pageImages[i];
+                if (imgData) {
+                    const img = imgData.img;
+                    const imgRatio = img.width / img.height;
+                    const targetRatio = ASPECT_RATIO;
+                    let drawWidth, drawHeight, offsetX, offsetY;
+                    
+                    if (imgRatio > targetRatio) {
+                        drawHeight = cellH;
+                        drawWidth = drawHeight * imgRatio;
+                        offsetX = (cellW - drawWidth) / 2;
+                        offsetY = 0;
+                    } else {
+                        drawWidth = cellW;
+                        drawHeight = drawWidth / imgRatio;
+                        offsetX = 0;
+                        offsetY = (cellH - drawHeight) / 2;
+                    }
+                    ctx.drawImage(img, x + offsetX, y + offsetY, drawWidth, drawHeight);
+                    
+                    // 编号
+                    const number = imgData.order + 1;
+                    const text = `${number}`;
+                    const scaledFontSize = fontSize * scaleFactor;
+                    ctx.font = `500 ${scaledFontSize}px system-ui, -apple-system, sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    const textX = x + cellW/2;
+                    const textY = y + cellH - scaledFontSize/2 - 12 * scaleFactor;
+                    
+                    const metrics = ctx.measureText(text);
+                    const textWidth = metrics.width;
+                    const padding = 12 * scaleFactor;
+                    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                    ctx.beginPath();
+                    ctx.roundRect(textX - textWidth/2 - padding, textY - scaledFontSize/2 - 6, textWidth + padding*2, scaledFontSize + 12, 30);
+                    ctx.fill();
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText(text, textX, textY);
+                }
+            }
+            
+            return new Promise(resolve => {
+                offCanvas.toBlob(blob => resolve(blob), 'image/png');
+            });
+        }
+
+        // 导出当前页
+        async function exportCurrent() {
+            if (images.length === 0) { alert('请先导入图片'); return; }
+            const scale = parseInt(scaleSelect.value);
+            const blob = await exportPageAsBlob(currentPage, scale);
+            if (blob) {
+                saveAs(blob, `拼图_第${currentPage+1}页_${rows}x${cols}.png`);
+            }
+        }
+
+        // 导出全部为ZIP
+        async function exportAllAsZip() {
+            if (images.length === 0) { alert('请先导入图片'); return; }
+            const totalPages = getTotalPages();
+            const scale = parseInt(scaleSelect.value);
+            const zip = new JSZip();
+            
+            exportCurrentBtn.disabled = true;
+            exportAllBtn.disabled = true;
+            exportAllBtn.textContent = '打包中...';
+            
+            for (let p = 0; p < totalPages; p++) {
+                const blob = await exportPageAsBlob(p, scale);
+                if (blob) {
+                    zip.file(`拼图_第${p+1}页_${rows}x${cols}.png`, blob);
+                }
+            }
+            
+            const content = await zip.generateAsync({ type: 'blob' });
+            saveAs(content, `拼图_全部_${rows}x${cols}_共${totalPages}页.zip`);
+            
+            exportCurrentBtn.disabled = false;
+            exportAllBtn.disabled = false;
+            exportAllBtn.textContent = '📦 导出全部 (ZIP)';
+        }
+
+        // 监听行列变化
+        function updateGridFromInput() {
+            rows = parseInt(rowsInput.value) || 1;
+            cols = parseInt(colsInput.value) || 1;
+            rows = Math.min(20, Math.max(1, rows));
+            cols = Math.min(20, Math.max(1, cols));
+            rowsInput.value = rows;
+            colsInput.value = cols;
+            currentPage = 0;
+            renderPreview();
+        }
+
+        // ---------- 事件绑定 ----------
+        fileInput.addEventListener('change', (e) => {
+            importImages(e.target.files);
+        });
+        
+        rowsInput.addEventListener('change', updateGridFromInput);
+        colsInput.addEventListener('change', updateGridFromInput);
+        nineGridBtn.addEventListener('click', () => {
+            rowsInput.value = 3;
+            colsInput.value = 3;
+            updateGridFromInput();
+        });
+        
+        fontSizeSlider.addEventListener('input', (e) => {
+            fontSize = parseInt(e.target.value);
+            fontSizeValue.textContent = fontSize + 'px';
+            renderPreview();
+        });
+        
+        prevPageBtn.addEventListener('click', () => {
+            if (currentPage > 0) {
+                currentPage--;
+                renderPreview();
+            }
+        });
+        nextPageBtn.addEventListener('click', () => {
+            if (currentPage < getTotalPages() - 1) {
+                currentPage++;
+                renderPreview();
+            }
+        });
+        
+        exportCurrentBtn.addEventListener('click', exportCurrent);
+        exportAllBtn.addEventListener('click', exportAllAsZip);
+        
+        // 初始化渲染
+        renderPreview();
+        updateImageCountDisplay();
+        renderThumbnails();
+    })();
+</script>
+</body>
+              </html>
