@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI对话</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui;}
+body{background:#111;color:#eee;padding:15px;max-width:800px;margin:0 auto;}
+#box{height:70vh;overflow:auto;border:1px solid #333;padding:12px;border-radius:10px;margin-bottom:12px;}
+.msg{margin:8px 0;white-space:pre-wrap;line-height:1.6;}
+.user{color:#7cf}
+.ai{color:#fd9}
+#area{width:100%;height:80px;background:#222;border:1px solid #444;border-radius:8px;padding:10px;color:white;outline:none;font-size:16px;}
+#send{margin-top:8px;padding:10px 20px;border:none;border-radius:6px;background:#2585ff;color:white;font-size:16px;}
+</style>
+</head>
+<body>
+<div id="box"></div>
+<textarea id="area" placeholder="输入问题，Ctrl+回车发送"></textarea>
+<button id="send">发送</button>
+
+<script>
+const API_KEY = "sk-NIWfoAsCmUvU3UGRyCzNoCLckQkvPwPkPV16UYILRjWsAyNCC";
+const API_URL = "https://api.dzzi.ai/v1/chat/completions";
+// 公共跨域代理，解决浏览器CORS报错
+const PROXY = "https://corsproxy.io/?";
+
+const box = document.querySelector('#box');
+const area = document.querySelector('#area');
+const send = document.querySelector('#send');
+
+function add(text, cls){
+    let d = document.createElement('div');
+    d.className = 'msg '+cls;
+    d.innerText = text;
+    box.appendChild(d);
+    box.scrollTop = box.scrollHeight;
+}
+
+async function chat(){
+    let q = area.value.trim();
+    if(!q)return;
+    add("你："+q,"user");
+    area.value = "";
+    try{
+        let res = await fetch(PROXY + API_URL,{
+            method:"POST",
+            headers:{
+                "Content-Type":"application/json",
+                "Authorization":"Bearer " + API_KEY
+            },
+            body:JSON.stringify({
+                model:"gpt-3.5-turbo",
+                messages:[{"role":"user","content":q}]
+            })
+        })
+        let data = await res.json();
+        add("AI："+data.choices[0].message.content,"ai");
+    }catch(e){
+        add("AI：请求失败，可以开启CORS插件重试","ai");
+    }
+}
+
+send.onclick = chat;
+area.onkeydown = (e)=>{
+    if(e.ctrlKey && e.key === 'Enter') chat();
+}
+</script>
+</body>
+</html>
